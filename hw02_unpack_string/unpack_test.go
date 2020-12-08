@@ -1,7 +1,6 @@
 package hw02_unpack_string //nolint:golint,stylecheck
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -30,6 +29,47 @@ func TestUnpack(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, tc.expected, result)
 		})
+	}
+}
+
+func TestUnpackWithEscape(t *testing.T) {
+
+	for _, tst := range [...]test{
+		{
+			input:    `qwe\4\5`,
+			expected: `qwe45`,
+		},
+		{
+			input:    `qwe\45`,
+			expected: `qwe44444`,
+		},
+		{
+			input:    `qwe\\5`,
+			expected: `qwe\\\\\`,
+		},
+		{
+			input:    `qwe\\\3`,
+			expected: `qwe\3`,
+		},
+		{
+			input:    `\`,
+			expected: "",
+			err:      ErrInvalidString,
+		},
+		{
+			input:    `\q`,
+			expected: "",
+			err:      ErrInvalidString,
+		},
+		{
+			input:    `q5\`,
+			expected: "",
+			err:      ErrInvalidString,
+		},
+	} {
+		result, err := Unpack(tst.input)
+		require.Equal(t, tst.err, err)
+		require.Equal(t, tst.expected, result)
 	}
 }
 
