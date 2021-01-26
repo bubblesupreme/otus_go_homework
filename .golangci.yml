@@ -24,3 +24,4 @@ linters:
     - testpackage
     - wsl
     - wrapcheck
+    - ifshort
