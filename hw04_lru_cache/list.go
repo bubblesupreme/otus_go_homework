@@ -2,23 +2,23 @@ package hw04_lru_cache //nolint:golint,stylecheck
 
 type List interface {
 	Len() int
-	Front() *ListItem
-	Back() *ListItem
-	PushFront(v interface{}) *ListItem
-	PushBack(v interface{}) *ListItem
-	Remove(i *ListItem)
-	MoveToFront(i *ListItem)
+	Front() *listItem
+	Back() *listItem
+	PushFront(v interface{}) *listItem
+	PushBack(v interface{}) *listItem
+	Remove(i *listItem)
+	MoveToFront(i *listItem)
 }
 
-type ListItem struct {
+type listItem struct {
 	Value interface{}
-	Next  *ListItem
-	Prev  *ListItem
+	Next  *listItem
+	Prev  *listItem
 }
 
 type list struct {
-	front *ListItem
-	back  *ListItem
+	front *listItem
+	back  *listItem
 	len   int
 }
 
@@ -30,16 +30,16 @@ func (l *list) Len() int {
 	return l.len
 }
 
-func (l *list) Front() *ListItem {
+func (l *list) Front() *listItem {
 	return l.front
 }
 
-func (l *list) Back() *ListItem {
+func (l *list) Back() *listItem {
 	return l.back
 }
 
-func (l *list) PushFront(v interface{}) *ListItem {
-	newItem := ListItem{v, l.front, nil}
+func (l *list) PushFront(v interface{}) *listItem {
+	newItem := listItem{v, l.front, nil}
 	if l.Len() != 0 {
 		l.front.Prev = &newItem
 	}
@@ -51,8 +51,8 @@ func (l *list) PushFront(v interface{}) *ListItem {
 	return l.front
 }
 
-func (l *list) PushBack(v interface{}) *ListItem {
-	newItem := ListItem{v, nil, l.back}
+func (l *list) PushBack(v interface{}) *listItem {
+	newItem := listItem{v, nil, l.back}
 	if l.Len() != 0 {
 		l.back.Next = &newItem
 	}
@@ -64,7 +64,7 @@ func (l *list) PushBack(v interface{}) *ListItem {
 	return l.back
 }
 
-func (l *list) Remove(i *ListItem) {
+func (l *list) Remove(i *listItem) {
 	switch {
 	case l.Front() == l.Back():
 		l.front = nil
@@ -82,7 +82,7 @@ func (l *list) Remove(i *ListItem) {
 	l.len--
 }
 
-func (l *list) MoveToFront(i *ListItem) {
+func (l *list) MoveToFront(i *listItem) {
 	l.Remove(i)
 	if l.Len() != 0 {
 		l.front.Prev = i

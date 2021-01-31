@@ -1,5 +1,7 @@
 package hw04_lru_cache //nolint:golint,stylecheck
 
+import log "github.com/sirupsen/logrus"
+
 type Key string
 
 type Cache interface {
@@ -11,7 +13,7 @@ type Cache interface {
 type lruCache struct {
 	capacity int
 	queue    List
-	items    map[Key]*ListItem
+	items    map[Key]*listItem
 }
 
 type cacheItem struct {
@@ -20,10 +22,17 @@ type cacheItem struct {
 }
 
 func NewCache(capacity int) Cache {
-	return &lruCache{capacity, NewList(), make(map[Key]*ListItem, capacity)}
+	if capacity < 1 {
+		log.Warn("capacity is less than 1, cache will always be empty")
+	}
+	return &lruCache{capacity, NewList(), make(map[Key]*listItem, capacity)}
 }
 
 func (c *lruCache) Set(key Key, value interface{}) bool {
+	if c.capacity < 1 {
+		return false
+	}
+
 	newItem := cacheItem{key, value}
 	if v, ok := c.items[key]; ok {
 		c.queue.MoveToFront(v)
@@ -47,8 +56,6 @@ func (c *lruCache) Get(key Key) (interface{}, bool) {
 }
 
 func (c *lruCache) Clear() {
-	for c.queue.Front() != nil {
-		c.queue.Remove(c.queue.Front())
-	}
-	c.items = make(map[Key]*ListItem, c.capacity)
+	c.queue = NewList()
+	c.items = make(map[Key]*listItem, c.capacity)
 }
