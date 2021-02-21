@@ -1,5 +1,13 @@
 package main
 
+import (
+	"bufio"
+	"errors"
+	"log"
+	"os"
+	"path/filepath"
+)
+
 type Environment map[string]EnvValue
 
 // EnvValue helps to distinguish between empty files and files with the first empty line.
@@ -8,9 +16,87 @@ type EnvValue struct {
 	NeedRemove bool
 }
 
+var ErrNotDirectory = errors.New("path is not a directory")
+
+func findEndIdx(buf []byte) int {
+	if len(buf) == 0 {
+		return 0
+	}
+
+	endIdx := len(buf)
+	for endIdx > 0 {
+		if buf[endIdx-1] == byte(' ') || buf[endIdx-1] == byte('\t') {
+			endIdx--
+		} else {
+			break
+		}
+	}
+
+	// find terminated nulls
+	idx := 0
+	for idx < endIdx {
+		if buf[idx] == 0x00 {
+			endIdx = idx
+			break
+		}
+		idx++
+	}
+
+	return endIdx
+}
+
 // ReadDir reads a specified directory and returns map of env variables.
 // Variables represented as files where filename is name of variable, file first line is a value.
 func ReadDir(dir string) (Environment, error) {
-	// Place your code here
-	return nil, nil
+	dirI, err := os.Stat(dir)
+	if err != nil {
+		return nil, err
+	}
+	if !dirI.IsDir() {
+		return nil, ErrNotDirectory
+	}
+
+	env := Environment{}
+	err = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			log.Print(err)
+			return nil
+		}
+
+		if info.IsDir() {
+			return nil
+		}
+
+		f, err := os.OpenFile(path, os.O_RDONLY, os.ModeExclusive)
+		if err != nil {
+			log.Printf("Can't open file %s: %v", path, err)
+			return nil
+		}
+		defer f.Close()
+
+		bF := bufio.NewReader(f)
+		buf := make([]byte, 0)
+		readMore := true
+		for readMore {
+			var l []byte
+			l, readMore, err = bF.ReadLine()
+			if err != nil {
+				log.Printf("Can't open file %s: %v", path, err)
+				return nil
+			}
+			buf = append(buf, l...)
+		}
+
+		endIdx := findEndIdx(buf)
+
+		fName := filepath.Base(path)
+		env[fName] = EnvValue{string(buf[:endIdx]), endIdx == 0}
+
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return env, nil
 }
