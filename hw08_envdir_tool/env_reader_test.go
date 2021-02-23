@@ -14,11 +14,12 @@ func TestReadDirFull(t *testing.T) {
 	expected := Environment{
 		"BAR":        EnvValue{"bar", false},
 		"EMPTY":      EnvValue{"", true},
-		"FOO":        EnvValue{"   foo", false},
+		"FOO":        EnvValue{"   foo\nwith new line", false},
 		"HELLO":      EnvValue{"\"hello\"", false},
 		"SPACES":     EnvValue{"", true},
 		"TABULATION": EnvValue{"", true},
 		"ONE_LINE":   EnvValue{"\"one line\"", false},
+		"UNSET":      EnvValue{"", true},
 	}
 	size := len(expected)
 
@@ -29,7 +30,7 @@ func TestReadDirFull(t *testing.T) {
 		exp, ok := expected[v]
 		require.True(t, ok)
 		if ok {
-			require.Equal(t, r, exp)
+			require.Equal(t, exp, r)
 		}
 	}
 }

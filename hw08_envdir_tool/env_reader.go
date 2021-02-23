@@ -37,8 +37,7 @@ func findEndIdx(buf []byte) int {
 	idx := 0
 	for idx < endIdx {
 		if buf[idx] == 0x00 {
-			endIdx = idx
-			break
+			buf[idx] = '\n'
 		}
 		idx++
 	}
@@ -83,9 +82,9 @@ func ReadDir(dir string) (Environment, error) {
 			l, readMore, err = bF.ReadLine()
 			if err != nil {
 				log.WithField("path", path).Warning("failed to read line: ", err)
-				return nil
+			} else {
+				buf = append(buf, l...)
 			}
-			buf = append(buf, l...)
 		}
 
 		endIdx := findEndIdx(buf)
