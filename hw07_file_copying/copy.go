@@ -14,33 +14,40 @@ var (
 )
 
 func copyImpl(fIn io.Reader, fOut io.Writer, limit int) error {
-	nRead := 0
+	pb := NewProgressBar("copying...")
+
+	nCopy := 0
 	bufSize := 1024
 	if bufSize > limit {
 		bufSize = limit
 	}
+
+	pb.Start(int64(limit))
+
 	eof := false
-	for nRead < limit && !eof {
+	for nCopy < limit && !eof {
 		buf := make([]byte, bufSize)
-		nIn, err := io.ReadAtLeast(fIn, buf, bufSize)
+		nRead, err := io.ReadAtLeast(fIn, buf, bufSize)
 		if errors.Is(err, io.ErrUnexpectedEOF) {
 			eof = true
 		} else if err != nil {
 			return err
 		}
 
-		nRead += nIn
-
 		nWrite := 0
-		for nWrite < nIn {
-			nOut, err := fOut.Write(buf[nWrite:nIn])
+		for nWrite < nRead {
+			nOut, err := fOut.Write(buf[nWrite:nRead])
 			if err != nil {
 				return err
 			}
 			nWrite += nOut
 		}
+
+		nCopy += nRead
+		pb.Update(int64(nCopy))
 	}
 
+	pb.Finish()
 	return nil
 }
 
