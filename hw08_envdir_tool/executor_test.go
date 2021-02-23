@@ -1,4 +1,3 @@
-//nolint:ifshort
 package main
 
 import (
