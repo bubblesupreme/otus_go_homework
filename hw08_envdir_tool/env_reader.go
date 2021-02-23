@@ -3,9 +3,10 @@ package main
 import (
 	"bufio"
 	"errors"
-	"log"
 	"os"
 	"path/filepath"
+
+	log "github.com/sirupsen/logrus"
 )
 
 type Environment map[string]EnvValue
@@ -59,7 +60,7 @@ func ReadDir(dir string) (Environment, error) {
 	env := Environment{}
 	err = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			log.Print(err)
+			log.Warning(err)
 			return nil
 		}
 
@@ -69,7 +70,7 @@ func ReadDir(dir string) (Environment, error) {
 
 		f, err := os.OpenFile(path, os.O_RDONLY, os.ModeExclusive)
 		if err != nil {
-			log.Printf("Can't open file %s: %v", path, err)
+			log.WithField("path", path).Warning(err)
 			return nil
 		}
 		defer f.Close()
@@ -81,7 +82,7 @@ func ReadDir(dir string) (Environment, error) {
 			var l []byte
 			l, readMore, err = bF.ReadLine()
 			if err != nil {
-				log.Printf("Can't open file %s: %v", path, err)
+				log.WithField("path", path).Warning("failed to read line: ", err)
 				return nil
 			}
 			buf = append(buf, l...)
