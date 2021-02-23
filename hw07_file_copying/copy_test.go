@@ -16,11 +16,14 @@ import (
 
 func compareFiles(t *testing.T, f1, f2 string) {
 	var outbuf, errbuf bytes.Buffer
-	cmp := exec.Cmd{Path: "/bin/cmp", Args: []string{"", f1, f2}}
+	path, err := exec.LookPath("cmp")
+	require.Nil(t, err)
+
+	cmp := exec.Cmd{Path: path, Args: []string{"", f1, f2}}
 	cmp.Stdout = &outbuf
 	cmp.Stderr = &errbuf
 	fmt.Println(cmp.String())
-	err := cmp.Run()
+	err = cmp.Run()
 	require.Nil(t, err, "\nerr:%s\nstderr:%s\nstdout:%s", err, errbuf, outbuf)
 }
 
