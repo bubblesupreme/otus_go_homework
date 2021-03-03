@@ -1,4 +1,4 @@
-package hw05_parallel_execution //nolint:golint,stylecheck
+package hw05parallelexecution
 
 import (
 	"errors"
@@ -32,7 +32,7 @@ func worker(taskCh <-chan Task, doneCh <-chan struct{}, errCh chan<- struct{}, w
 	}
 }
 
-// Run starts tasks in N goroutines and stops its work when receiving M errors from tasks.
+// Run starts tasks in n goroutines and stops its work when receiving M errors from tasks.
 func Run(tasks []Task, n int, m int) error {
 	if m <= 0 {
 		return ErrErrorsLimitExceeded

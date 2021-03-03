@@ -1,4 +1,4 @@
-package hw04_lru_cache //nolint:golint,stylecheck
+package hw04lrucache
 
 import (
 	"testing"
@@ -13,6 +13,52 @@ func TestList(t *testing.T) {
 		require.Equal(t, 0, l.Len())
 		require.Nil(t, l.Front())
 		require.Nil(t, l.Back())
+	})
+
+	t.Run("list length = 1", func(t *testing.T) {
+		l := NewList()
+		l.PushBack(5)
+
+		require.Equal(t, 1, l.Len())
+		require.Equal(t, 5, l.Front().Value)
+		require.Equal(t, 5, l.Back().Value)
+
+		l.Remove(l.Front())
+		require.Equal(t, 0, l.Len())
+		require.Nil(t, l.Front())
+		require.Nil(t, l.Back())
+	})
+
+	t.Run("remove front", func(t *testing.T) {
+		l := NewList()
+		l.PushBack(1)
+		l.PushBack(2)
+		require.Equal(t, 2, l.Len())
+
+		l.Remove(l.Front())
+		require.Equal(t, 1, l.Len())
+		require.Equal(t, 2, l.Front().Value)
+		require.Equal(t, 2, l.Back().Value)
+	})
+
+	t.Run("remove middle and back", func(t *testing.T) {
+		l := NewList()
+		l.PushBack(1)
+		l.PushBack(2)
+		middle := l.PushBack(3)
+		l.PushBack(4)
+		l.PushBack(5)
+		require.Equal(t, 5, l.Len())
+
+		l.Remove(middle)
+		require.Equal(t, 4, l.Len())
+		require.Equal(t, 1, l.Front().Value)
+		require.Equal(t, 5, l.Back().Value)
+
+		l.Remove(l.Back())
+		require.Equal(t, 3, l.Len())
+		require.Equal(t, 1, l.Front().Value)
+		require.Equal(t, 4, l.Back().Value)
 	})
 
 	t.Run("complex", func(t *testing.T) {

@@ -20,6 +20,13 @@
 [Инструкция по сдаче ДЗ](https://github.com/OtusGolang/home_work/wiki#%D0%A1%D1%82%D1%83%D0%B4%D0%B5%D0%BD%D1%82%D0%B0%D0%BC).
 
 ---
+Используемая версия [golangci-lint](https://golangci-lint.run/usage/install/#other-ci): <b>v1.37.0</b>
+```
+$ golangci-lint version
+golangci-lint has version 1.37.0 built from 34e5fc63 on 2021-02-17T09:32:37Z
+```
+
+---
 Авторы ДЗ:
 - [Дмитрий Смаль](https://github.com/mialinx)
 - [Антон Телышев](https://github.com/Antonboom)

@@ -1,4 +1,4 @@
-package hw05_parallel_execution //nolint:golint,stylecheck
+package hw05parallelexecution
 
 import (
 	"errors"
@@ -67,7 +67,6 @@ func TestRun(t *testing.T) {
 		require.Equal(t, runTasksCount, int32(tasksCount), "not all tasks were completed")
 		require.LessOrEqual(t, int64(elapsedTime), int64(sumTime/2), "tasks were run sequentially?")
 	})
-
 
 	t.Run("invalid M errors <= 0", func(t *testing.T) {
 		tasksCount := 5
