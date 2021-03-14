@@ -36,4 +36,26 @@ func TestGetDomainStat(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, DomainStat{}, result)
 	})
+
+	t.Run("empty reader", func(t *testing.T) {
+		result, err := GetDomainStat(bytes.NewBufferString(""), "unknown")
+		require.NoError(t, err)
+		require.Equal(t, DomainStat{}, result)
+	})
+
+	t.Run("no email", func(t *testing.T) {
+		result, err := GetDomainStat(bytes.NewBufferString(`{"Id":1}`), "unknown")
+		require.NoError(t, err)
+		require.Equal(t, DomainStat{}, result)
+	})
+
+	t.Run("broken json", func(t *testing.T) {
+		_, err := GetDomainStat(bytes.NewBufferString(`{"Id:1}`), "unknown")
+		require.Error(t, err)
+	})
+
+	t.Run("nil reader", func(t *testing.T) {
+		_, err := GetDomainStat(nil, "unknown")
+		require.ErrorIs(t, err, errNilReader)
+	})
 }

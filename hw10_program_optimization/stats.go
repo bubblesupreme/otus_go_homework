@@ -31,7 +31,10 @@ const (
 	stringsChanSize int = 300
 )
 
-var nDomainsWorkers = runtime.NumCPU()
+var (
+	nDomainsWorkers = runtime.NumCPU()
+	errNilReader    = errors.New("io.reader is nil")
+)
 
 var userPool = sync.Pool{
 	New: func() interface{} { return new(User) },
@@ -43,6 +46,10 @@ type syncDomains struct {
 }
 
 func GetDomainStat(r io.Reader, domain string) (DomainStat, error) {
+	if r == nil {
+		return nil, errNilReader
+	}
+
 	wg, ctx := errgroup.WithContext(context.Background())
 
 	byteCh := readStep(ctx, r, wg)
@@ -67,7 +74,7 @@ func readStep(ctx context.Context, r io.Reader, wg *errgroup.Group) <-chan []byt
 				readEnd := false
 				buf := make([]byte, readSize)
 				n, err := io.ReadAtLeast(r, buf, readSize)
-				if errors.Is(err, io.ErrUnexpectedEOF) {
+				if errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, io.EOF) {
 					readEnd = true
 				} else if err != nil {
 					return err
@@ -175,9 +182,7 @@ func getDomain(rg *regexp.Regexp, rowBytes []byte, domains *syncDomains) error {
 		return err
 	}
 
-	if err := checkDomain(rg, u, domains); err != nil {
-		return err
-	}
+	checkDomain(rg, u, domains)
 
 	return nil
 }
@@ -190,7 +195,7 @@ func getUser(rowBytes []byte, u *User) error {
 	return nil
 }
 
-func checkDomain(rg *regexp.Regexp, u *User, domains *syncDomains) error {
+func checkDomain(rg *regexp.Regexp, u *User, domains *syncDomains) {
 	if matched := rg.Match([]byte(u.Email)); matched {
 		domains.Lock()
 		num := domains.domains[strings.ToLower(strings.SplitN(u.Email, "@", 2)[1])]
@@ -198,6 +203,4 @@ func checkDomain(rg *regexp.Regexp, u *User, domains *syncDomains) error {
 		domains.domains[strings.ToLower(strings.SplitN(u.Email, "@", 2)[1])] = num
 		domains.Unlock()
 	}
-
-	return nil
 }
