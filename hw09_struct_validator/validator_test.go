@@ -46,6 +46,11 @@ type (
 		Body string `json:"omitempty"`
 	}
 
+	ResponseInvalidTag struct {
+		Code int    `validate:"in:200,404|tag:0"`
+		Body string `json:"omitempty"`
+	}
+
 	Nested struct {
 		App App `validate:"nested"`
 	}
@@ -55,90 +60,313 @@ type (
 	}
 )
 
-func TestValidate(t *testing.T) {
+func TestValidatePositive(t *testing.T) {
+	tests := []struct {
+		in interface{}
+	}{
+		{
+			struct{}{},
+		},
+		{
+			User{
+				"000000000000000000000000000000000001",
+				"Ivan",
+				20,
+				"ivan78@gmail.com",
+				UserRole("stuff"),
+				[]string{"89077876566"},
+				json.RawMessage{},
+			},
+		},
+		{
+			User{
+				"000000000000000000000000000000000001",
+				"Ivan",
+				20,
+				"ivan78@gmail.com",
+				UserRole("stuff"),
+				[]string{"89077876566", "89077876566"},
+				json.RawMessage{},
+			},
+		},
+	}
+
+	for i, tt := range tests {
+		t.Run(fmt.Sprintf("case %d", i), func(t *testing.T) {
+			tt := tt
+			t.Parallel()
+
+			require.Nil(t, Validate(tt.in))
+		})
+	}
+}
+
+func TestValidateNegative(t *testing.T) {
 	tests := []struct {
 		in          interface{}
 		expectedErr error
 	}{
 		{
-			struct{}{},
-			nil,
+			User{
+				"01",
+				"Ivan",
+				20,
+				"ivan78@gmail.com",
+				UserRole("stuff"),
+				[]string{"89077876566"},
+				json.RawMessage{},
+			},
+			ValidationErrors{
+				ValidationError{"ID", arrayErrors{ErrStringValueLen}},
+			},
 		},
 		{
-			User{"000000000000000000000000000000000001", "Ivan", 20, "ivan78@gmail.com", UserRole("stuff"), []string{"89077876566"}, json.RawMessage{}},
-			nil,
+			User{
+				"000000000000000000000000000000000001",
+				"Ivan",
+				10,
+				"ivan78@gmail.com",
+				UserRole("stuff"),
+				[]string{"89077876566"},
+				json.RawMessage{},
+			},
+			ValidationErrors{
+				ValidationError{"Age", arrayErrors{ErrIntValueMin}},
+			},
 		},
 		{
-			User{"01", "Ivan", 20, "ivan78@gmail.com", UserRole("stuff"), []string{"89077876566"}, json.RawMessage{}},
-			ValidationErrors{ValidationError{"ID", arrayErrors{ErrStringValueLen}}},
+			User{
+				"000000000000000000000000000000000001",
+				"Ivan",
+				51,
+				"ivan78@gmail.com",
+				UserRole("stuff"),
+				[]string{"89077876566"},
+				json.RawMessage{},
+			},
+			ValidationErrors{
+				ValidationError{"Age", arrayErrors{ErrIntValueMax}},
+			},
 		},
 		{
-			User{"000000000000000000000000000000000001", "Ivan", 10, "ivan78@gmail.com", UserRole("stuff"), []string{"89077876566"}, json.RawMessage{}},
-			ValidationErrors{ValidationError{"Age", arrayErrors{ErrIntValueMin}}},
+			User{
+				"000000000000000000000000000000000001",
+				"Ivan",
+				20,
+				"ivan78@@\\gmail.com",
+				UserRole("stuff"),
+				[]string{"89077876566"},
+				json.RawMessage{},
+			},
+			ValidationErrors{
+				ValidationError{"Email", arrayErrors{ErrStringValueRegexp}},
+			},
 		},
 		{
-			User{"000000000000000000000000000000000001", "Ivan", 51, "ivan78@gmail.com", UserRole("stuff"), []string{"89077876566"}, json.RawMessage{}},
-			ValidationErrors{ValidationError{"Age", arrayErrors{ErrIntValueMax}}},
+			User{
+				"000000000000000000000000000000000001",
+				"Ivan",
+				20,
+				"ivan78@gmail.com",
+				UserRole("worker"),
+				[]string{"89077876566"},
+				json.RawMessage{},
+			},
+			ValidationErrors{
+				ValidationError{
+					"Role",
+					arrayErrors{ErrStringValueSet},
+				},
+			},
 		},
 		{
-			User{"000000000000000000000000000000000001", "Ivan", 20, "ivan78@@\\gmail.com", UserRole("stuff"), []string{"89077876566"}, json.RawMessage{}},
-			ValidationErrors{ValidationError{"Email", arrayErrors{ErrStringValueRegexp}}},
+			User{
+				"000000000000000000000000000000000001",
+				"Ivan",
+				20,
+				"ivan78@gmail.com",
+				UserRole("stuff"),
+				[]string{"89077876566788"},
+				json.RawMessage{},
+			},
+			ValidationErrors{
+				ValidationError{
+					"Phones",
+					ValidationErrors{
+						ValidationError{
+							"0",
+							arrayErrors{ErrStringValueLen},
+						},
+					},
+				},
+			},
 		},
 		{
-			User{"000000000000000000000000000000000001", "Ivan", 20, "ivan78@gmail.com", UserRole("worker"), []string{"89077876566"}, json.RawMessage{}},
-			ValidationErrors{ValidationError{"Role", arrayErrors{ErrStringValueSet}}},
+			User{
+				"000000000000000000000000000000000001",
+				"Ivan",
+				20,
+				"ivan78@gmail.com",
+				UserRole("stuff"),
+				[]string{"89077876566", "89077876566788"},
+				json.RawMessage{},
+			},
+			ValidationErrors{
+				ValidationError{
+					"Phones",
+					ValidationErrors{
+						ValidationError{
+							"1",
+							arrayErrors{ErrStringValueLen},
+						},
+					},
+				},
+			},
 		},
+	}
+
+	for i, tt := range tests {
+		t.Run(fmt.Sprintf("case %d", i), func(t *testing.T) {
+			tt := tt
+			t.Parallel()
+
+			require.EqualError(t, Validate(tt.in), tt.expectedErr.Error())
+		})
+	}
+}
+
+func TestValidateMultipleErrors(t *testing.T) {
+	tests := []struct {
+		in          interface{}
+		expectedErr error
+	}{
 		{
-			User{"000000000000000000000000000000000001", "Ivan", 20, "ivan78@gmail.com", UserRole("stuff"), []string{"89077876566", "89077876566"}, json.RawMessage{}},
-			nil,
-		},
-		{
-			User{"000000000000000000000000000000000001", "Ivan", 20, "ivan78@gmail.com", UserRole("stuff"), []string{"89077876566788"}, json.RawMessage{}},
-			ValidationErrors{ValidationError{"Phones", ValidationErrors{ValidationError{"0", arrayErrors{ErrStringValueLen}}}}},
-		},
-		{
-			User{"000000000000000000000000000000000001", "Ivan", 20, "ivan78@gmail.com", UserRole("stuff"), []string{"89077876566", "89077876566788"}, json.RawMessage{}},
-			ValidationErrors{ValidationError{"Phones", ValidationErrors{ValidationError{"1", arrayErrors{ErrStringValueLen}}}}},
-		},
-		{
-			User{"000000000000000000000000000000000001", "Ivan", 20, "ivan78@gmail.com", UserRole("stuff"), []string{"89077876566788", "89077876566788"}, json.RawMessage{}},
-			ValidationErrors{ValidationError{"Phones", ValidationErrors{ValidationError{"0", arrayErrors{ErrStringValueLen}}, ValidationError{"1", arrayErrors{ErrStringValueLen}}}}},
-		},
-		{
-			App{"01.01"},
-			nil,
+			User{
+				"000000000000000000000000000000000001",
+				"Ivan",
+				20,
+				"ivan78@gmail.com",
+				UserRole("stuff"),
+				[]string{"89077876566788", "89077876566788"},
+				json.RawMessage{},
+			},
+			ValidationErrors{
+				ValidationError{
+					"Phones",
+					ValidationErrors{
+						ValidationError{
+							"0",
+							arrayErrors{ErrStringValueLen},
+						},
+						ValidationError{
+							"1",
+							arrayErrors{ErrStringValueLen},
+						},
+					},
+				},
+			},
 		},
 		{
 			App{"01.0"},
-			ValidationErrors{ValidationError{"Version", arrayErrors{ErrStringValueLen, ErrStringValueSet}}},
+			ValidationErrors{
+				ValidationError{
+					"Version",
+					arrayErrors{
+						ErrStringValueLen,
+						ErrStringValueSet,
+					},
+				},
+			},
 		},
+	}
+
+	for i, tt := range tests {
+		t.Run(fmt.Sprintf("case %d", i), func(t *testing.T) {
+			tt := tt
+			t.Parallel()
+			require.EqualError(t, Validate(tt.in), tt.expectedErr.Error())
+		})
+	}
+}
+
+func TestValidateInvalidData(t *testing.T) {
+	tests := []struct {
+		in          interface{}
+		expectedErr error
+	}{
 		{
 			Response{300, ""},
-			ValidationErrors{ValidationError{"Code", arrayErrors{ErrTagParseTwoInts}}},
+			ValidationErrors{
+				ValidationError{
+					"Code",
+					arrayErrors{ErrTagParseTwoInts},
+				},
+			},
 		},
 		{
 			ResponseErrParseTag{300, ""},
-			ValidationErrors{ValidationError{"Body", ErrParseTag}},
+			ValidationErrors{
+				ValidationError{
+					"Body",
+					ErrParseTag,
+				},
+			},
 		},
 		{
 			ResponseErrItoa{300, ""},
-			ValidationErrors{ValidationError{"Code", arrayErrors{errors.New("strconv.ParseInt: parsing \"aa\": invalid syntax")}}},
+			ValidationErrors{
+				ValidationError{
+					"Code",
+					arrayErrors{errors.New("strconv.ParseInt: parsing \"aa\": invalid syntax")},
+				},
+			},
 		},
 		{
 			Token{'0'},
-			ValidationErrors{ValidationError{"Header", ErrTypeNotImplemented}},
+			ValidationErrors{
+				ValidationError{"Header", ErrTypeNotImplemented},
+			},
 		},
+		{
+			ResponseInvalidTag{300, ""},
+			ValidationErrors{
+				ValidationError{"Code", arrayErrors{ErrNoCheckFunction}},
+			},
+		},
+	}
+
+	for i, tt := range tests {
+		t.Run(fmt.Sprintf("case %d", i), func(t *testing.T) {
+			tt := tt
+			t.Parallel()
+			require.EqualError(t, Validate(tt.in), tt.expectedErr.Error())
+		})
+	}
+}
+
+func TestValidateNested(t *testing.T) {
+	tests := []struct {
+		in          interface{}
+		expectedErr error
+	}{
 		{
 			Nested{App{"01.01"}},
 			nil,
 		},
 		{
-			Nested{App{"01.02"}},
-			ValidationErrors{ValidationError{"App", ValidationErrors{ValidationError{"Version", arrayErrors{ErrStringValueSet}}}}},
-		},
-		{
 			NestedNotTag{App{"01.02"}},
 			nil,
+		},
+		{
+			Nested{App{"01.02"}},
+			ValidationErrors{
+				ValidationError{
+					"App",
+					ValidationErrors{
+						ValidationError{"Version", arrayErrors{ErrStringValueSet}},
+					},
+				},
+			},
 		},
 	}
 

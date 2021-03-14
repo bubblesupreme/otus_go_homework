@@ -19,13 +19,24 @@ var (
 	ErrStringValueLen     = errors.New("string value has incompatible length")
 	ErrStringValueRegexp  = errors.New("string value does not belong to the require regexp")
 	ErrStringValueSet     = errors.New("string value does not belong to the require set")
-	ErrIntValueMin        = errors.New("int value has incompatible min")
+	ErrIntValueMin        = errors.New("int value does not belong to the require min")
 	ErrIntValueMax        = errors.New("int value does not belong to the require max")
 	ErrIntValueRange      = errors.New("int value does not belong to the require range")
 	ErrTagParseTwoInts    = errors.New("failed to parse validation value with 2 int")
 	ErrParseTag           = fmt.Errorf("failed to parse tag")
+	ErrNoCheckFunction    = fmt.Errorf("there is no check for given tag")
 
-	errTagValueNotFound = errors.New("validation value not found")
+	checkStringFuncs = map[string]func(v string, pattern string) error{
+		"len":    checkStringLen,
+		"regexp": checkStringRegexp,
+		"in":     checkStringSet,
+	}
+
+	checkIntFuncs = map[string]func(v int64, pattern string) error{
+		"min": checkIntMin,
+		"max": checkIntMax,
+		"in":  checkIntRange,
+	}
 )
 
 type ValidationError struct {
@@ -43,11 +54,11 @@ type validationTag struct {
 }
 
 type intValidationTag struct {
-	base validationTag
+	validationTag
 }
 
 type stringValidationTag struct {
-	base validationTag
+	validationTag
 }
 
 func (v ValidationErrors) Error() string {
@@ -91,79 +102,35 @@ func (a arrayErrors) Error() string {
 	return strings.Join(s, "")
 }
 
-func (t validationTag) getStringValue(key string) (string, error) {
-	if v, ok := t.values[key]; ok {
-		return v, nil
+func getIntValue(str string) (int64, error) {
+	m, err := strconv.ParseInt(str, 10, 64)
+	if err != nil {
+		return 0, err
 	}
-
-	return "", errTagValueNotFound
+	return m, nil
 }
 
-func (t validationTag) getIntValue(key string) (int64, error) {
-	if v, ok := t.values[key]; ok {
-		m, err := strconv.ParseInt(v, 10, 64)
-		if err != nil {
-			return 0, err
-		}
-		return m, nil
+func getIntPairValue(str string) ([]int64, error) {
+	vals := strings.Split(str, ",")
+	if len(vals) != 2 {
+		return nil, ErrTagParseTwoInts
 	}
-
-	return 0, errTagValueNotFound
-}
-
-func (t validationTag) getIntPairValue(key string) ([]int64, error) {
-	if v, ok := t.values[key]; ok {
-		vals := strings.Split(v, ",")
-		if len(vals) != 2 {
-			return nil, ErrTagParseTwoInts
-		}
-		res := make([]int64, 2)
-		var err error
-		res[0], err = strconv.ParseInt(vals[0], 10, 64)
-		if err != nil {
-			return nil, err
-		}
-		res[1], err = strconv.ParseInt(vals[1], 10, 64)
-		if err != nil {
-			return nil, err
-		}
-		return res, nil
+	res := make([]int64, 2)
+	var err error
+	res[0], err = strconv.ParseInt(vals[0], 10, 64)
+	if err != nil {
+		return nil, err
 	}
-
-	return nil, errTagValueNotFound
-}
-
-func (t validationTag) getStringArrayValue(key string) ([]string, error) {
-	if v, ok := t.values[key]; ok {
-		vals := strings.Split(v, ",")
-		return vals, nil
+	res[1], err = strconv.ParseInt(vals[1], 10, 64)
+	if err != nil {
+		return nil, err
 	}
-
-	return nil, errTagValueNotFound
+	return res, nil
 }
 
-func (t intValidationTag) getMax() (int64, error) {
-	return t.base.getIntValue("max")
-}
-
-func (t intValidationTag) getMin() (int64, error) {
-	return t.base.getIntValue("min")
-}
-
-func (t intValidationTag) getRange() ([]int64, error) {
-	return t.base.getIntPairValue("in")
-}
-
-func (t stringValidationTag) getLen() (int64, error) {
-	return t.base.getIntValue("len")
-}
-
-func (t stringValidationTag) getSet() ([]string, error) {
-	return t.base.getStringArrayValue("in")
-}
-
-func (t stringValidationTag) getRegexp() (string, error) {
-	return t.base.getStringValue("regexp")
+func getStringArrayValue(str string) []string {
+	vals := strings.Split(str, ",")
+	return vals
 }
 
 func getValidationTag(tag string) (validationTag, error) {
@@ -191,92 +158,76 @@ func getIntValidationTag(tag string) (intValidationTag, error) {
 	return intValidationTag{base}, err
 }
 
-func checkStringLen(v string, strValTag stringValidationTag) error {
-	l, err := strValTag.getLen()
+func checkStringLen(v string, pattern string) error {
+	l, err := getIntValue(pattern)
 	if err != nil {
-		if !errors.Is(err, errTagValueNotFound) {
-			return err
-		}
-	} else {
-		if len(v) != int(l) {
-			return ErrStringValueLen
-		}
+		return err
+	}
+
+	if len(v) != int(l) {
+		return ErrStringValueLen
 	}
 
 	return nil
 }
 
-func checkStringRegexp(v string, strValTag stringValidationTag) error {
-	r, err := strValTag.getRegexp()
+func checkStringRegexp(v string, pattern string) error {
+	res, err := regexp.MatchString(pattern, v)
 	if err != nil {
-		if !errors.Is(err, errTagValueNotFound) {
-			return err
-		}
-	} else {
-		res, err := regexp.MatchString(r, v)
-		if err != nil {
-			return err
-		}
-		if res {
+		return err
+	}
+
+	if res {
+		return nil
+	}
+
+	return ErrStringValueRegexp
+}
+
+func checkStringSet(v string, pattern string) error {
+	set := getStringArrayValue(pattern)
+
+	for _, s := range set {
+		if v == s {
 			return nil
 		}
-		return ErrStringValueRegexp
 	}
-
-	return nil
+	return ErrStringValueSet
 }
 
-func checkStringSet(v string, strValTag stringValidationTag) error {
-	set, err := strValTag.getSet()
+func checkIntMax(v int64, pattern string) error {
+	m, err := getIntValue(pattern)
 	if err != nil {
-		if !errors.Is(err, errTagValueNotFound) {
-			return err
-		}
-	} else {
-		for _, s := range set {
-			if v == s {
-				return nil
-			}
-		}
-		return ErrStringValueSet
+		return err
 	}
 
-	return nil
-}
-
-func checkIntMax(v int64, intValTag intValidationTag) error {
-	m, err := intValTag.getMax()
-	if err != nil {
-		if !errors.Is(err, errTagValueNotFound) {
-			return err
-		}
-	} else if v > m {
+	if v > m {
 		return ErrIntValueMax
 	}
 
 	return nil
 }
 
-func checkIntMin(v int64, intValTag intValidationTag) error {
-	m, err := intValTag.getMin()
+func checkIntMin(v int64, pattern string) error {
+	m, err := getIntValue(pattern)
 	if err != nil {
-		if !errors.Is(err, errTagValueNotFound) {
-			return err
-		}
-	} else if v < m {
+		return err
+	}
+
+	if v < m {
 		return ErrIntValueMin
 	}
 
 	return nil
 }
 
-func checkIntRange(v int64, intValTag intValidationTag) error {
-	m, err := intValTag.getRange()
+func checkIntRange(v int64, pattern string) error {
+	m, err := getIntPairValue(pattern)
 	if err != nil {
-		if !errors.Is(err, errTagValueNotFound) {
-			return err
-		}
-	} else if v < m[0] || v > m[1] {
+		return err
+	}
+
+	if v < m[0] || v > m[1] {
 		return ErrIntValueRange
 	}
 
@@ -291,19 +242,15 @@ func validateString(v string, tag string) error {
 
 	var res arrayErrors
 
-	err = checkStringLen(v, strValTag)
-	if err != nil {
-		res = append(res, err)
-	}
-
-	err = checkStringRegexp(v, strValTag)
-	if err != nil {
-		res = append(res, err)
-	}
-
-	err = checkStringSet(v, strValTag)
-	if err != nil {
-		res = append(res, err)
+	for k, pattern := range strValTag.values {
+		f, ok := checkStringFuncs[k]
+		if !ok {
+			res = append(res, ErrNoCheckFunction)
+			continue
+		}
+		if err := f(v, pattern); err != nil {
+			res = append(res, err)
+		}
 	}
 
 	if len(res) > 0 {
@@ -321,19 +268,15 @@ func validateInt(v int64, tag string) error {
 
 	var res arrayErrors
 
-	err = checkIntMax(v, intValTag)
-	if err != nil {
-		res = append(res, err)
-	}
-
-	err = checkIntMin(v, intValTag)
-	if err != nil {
-		res = append(res, err)
-	}
-
-	err = checkIntRange(v, intValTag)
-	if err != nil {
-		res = append(res, err)
+	for k, pattern := range intValTag.values {
+		f, ok := checkIntFuncs[k]
+		if !ok {
+			res = append(res, ErrNoCheckFunction)
+			continue
+		}
+		if err := f(v, pattern); err != nil {
+			res = append(res, err)
+		}
 	}
 
 	if len(res) > 0 {
