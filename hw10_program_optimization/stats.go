@@ -1,67 +1,203 @@
 package hw10programoptimization
 
 import (
-	"encoding/json"
-	"fmt"
+	"bytes"
+	"context"
+	"errors"
 	"io"
-	"io/ioutil"
 	"regexp"
+	"runtime"
 	"strings"
+	"sync"
+
+	"golang.org/x/sync/errgroup"
 )
 
+//easyjson:json
 type User struct {
 	ID       int
-	Name     string
-	Username string
-	Email    string
-	Phone    string
-	Password string
-	Address  string
+	Name     string `json:"-"`
+	Username string `json:"-"`
+	Email    string `json:"Email"`
+	Phone    string `json:"-"`
+	Password string `json:"-"`
+	Address  string `json:"-"`
 }
 
 type DomainStat map[string]int
 
+const (
+	readSize        int = 1024 * 4
+	stringsChanSize int = 300
+)
+
+var nDomainsWorkers = runtime.NumCPU()
+
+var userPool = sync.Pool{
+	New: func() interface{} { return new(User) },
+}
+
+type syncDomains struct {
+	sync.Mutex
+	domains DomainStat
+}
+
 func GetDomainStat(r io.Reader, domain string) (DomainStat, error) {
-	u, err := getUsers(r)
-	if err != nil {
-		return nil, fmt.Errorf("get users error: %w", err)
-	}
-	return countDomains(u, domain)
+	wg, ctx := errgroup.WithContext(context.Background())
+
+	byteCh := readStep(ctx, r, wg)
+	strCh := splitStep(ctx, byteCh, wg)
+	res := getDomainsStep(ctx, domain, strCh, wg)
+
+	err := wg.Wait()
+
+	return res, err
 }
 
-type users [100_000]User
+func readStep(ctx context.Context, r io.Reader, wg *errgroup.Group) <-chan []byte {
+	resCh := make(chan []byte, 1)
+	wg.Go(func() error {
+		defer close(resCh)
 
-func getUsers(r io.Reader) (result users, err error) {
-	content, err := ioutil.ReadAll(r)
-	if err != nil {
-		return
-	}
+		for {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			default:
+				readEnd := false
+				buf := make([]byte, readSize)
+				n, err := io.ReadAtLeast(r, buf, readSize)
+				if errors.Is(err, io.ErrUnexpectedEOF) {
+					readEnd = true
+				} else if err != nil {
+					return err
+				}
 
-	lines := strings.Split(string(content), "\n")
-	for i, line := range lines {
-		var user User
-		if err = json.Unmarshal([]byte(line), &user); err != nil {
-			return
+				resCh <- buf[:n]
+
+				if readEnd {
+					return nil
+				}
+			}
 		}
-		result[i] = user
-	}
-	return
+	})
+
+	return resCh
 }
 
-func countDomains(u users, domain string) (DomainStat, error) {
-	result := make(DomainStat)
+func splitStep(ctx context.Context, byteCh <-chan []byte, wg *errgroup.Group) <-chan []byte {
+	resCh := make(chan []byte, stringsChanSize)
 
-	for _, user := range u {
-		matched, err := regexp.Match("\\."+domain, []byte(user.Email))
-		if err != nil {
-			return nil, err
+	wg.Go(func() error {
+		defer close(resCh)
+
+		residue := make([]byte, 0)
+		for {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case page, ok := <-byteCh:
+				if !ok {
+					if len(residue) != 0 {
+						resCh <- residue
+					}
+
+					return nil
+				}
+
+				lines := bytes.Split(page, []byte{'\n'})
+
+				lines[0] = append(residue, lines[0]...)
+				residue = writeLinesToChanel(lines, resCh)
+			}
+		}
+	})
+
+	return resCh
+}
+
+func writeLinesToChanel(lines [][]byte, ch chan<- []byte) []byte {
+	for i, l := range lines {
+		if i == len(lines)-1 {
+			if len(l) > 0 && l[len(l)-1] != '\n' {
+				return l
+			}
 		}
 
-		if matched {
-			num := result[strings.ToLower(strings.SplitN(user.Email, "@", 2)[1])]
-			num++
-			result[strings.ToLower(strings.SplitN(user.Email, "@", 2)[1])] = num
+		ch <- l
+	}
+
+	return make([]byte, 0)
+}
+
+func getDomainsStep(ctx context.Context, domain string, byteCh <-chan []byte, wg *errgroup.Group) DomainStat {
+	res := syncDomains{sync.Mutex{}, DomainStat{}}
+	rg, err := regexp.Compile("\\." + domain)
+	if err != nil {
+		wg.Go(func() error {
+			return err
+		})
+	}
+
+	for i := 0; i < nDomainsWorkers; i++ {
+		wg.Go(func() error {
+			return getDomainWorker(ctx, byteCh, rg, &res)
+		})
+	}
+
+	return res.domains
+}
+
+func getDomainWorker(ctx context.Context, byteCh <-chan []byte, rg *regexp.Regexp, domains *syncDomains) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case str, ok := <-byteCh:
+			if !ok {
+				return nil
+			}
+
+			if err := getDomain(rg, str, domains); err != nil {
+				return err
+			}
 		}
 	}
-	return result, nil
+}
+
+func getDomain(rg *regexp.Regexp, rowBytes []byte, domains *syncDomains) error {
+	u := userPool.Get().(*User)
+	defer userPool.Put(u)
+	u.Email = ""
+
+	err := getUser(rowBytes, u)
+	if err != nil {
+		return err
+	}
+
+	if err := checkDomain(rg, u, domains); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func getUser(rowBytes []byte, u *User) error {
+	if err := u.UnmarshalJSON(rowBytes); err != nil && !errors.Is(err, io.EOF) {
+		return err
+	}
+
+	return nil
+}
+
+func checkDomain(rg *regexp.Regexp, u *User, domains *syncDomains) error {
+	if matched := rg.Match([]byte(u.Email)); matched {
+		domains.Lock()
+		num := domains.domains[strings.ToLower(strings.SplitN(u.Email, "@", 2)[1])]
+		num++
+		domains.domains[strings.ToLower(strings.SplitN(u.Email, "@", 2)[1])] = num
+		domains.Unlock()
+	}
+
+	return nil
 }
