@@ -16,8 +16,8 @@ import (
 )
 
 func TestTelnetClientBasic(t *testing.T) {
-	str1 := "hello\n"
-	str2 := "world\n"
+	str1 := []byte("hello\n")
+	str2 := []byte("world\n")
 
 	l, err := net.Listen("tcp", "127.0.0.1:")
 	require.NoError(t, err)
@@ -29,8 +29,8 @@ func TestTelnetClientBasic(t *testing.T) {
 	go func() {
 		defer wg.Done()
 
-		in := &bytes.Buffer{}
-		out := &bytes.Buffer{}
+		in := &Buffer{}
+		out := &Buffer{}
 
 		timeout, err := time.ParseDuration("10s")
 		require.NoError(t, err)
@@ -38,13 +38,16 @@ func TestTelnetClientBasic(t *testing.T) {
 		client := NewTelnetClient(l.Addr().String(), timeout, ioutil.NopCloser(in), out)
 		require.NoError(t, client.Connect())
 		defer func() { require.NoError(t, client.Close()) }()
-		in.WriteString(str1)
+		n, err := in.Write(str1)
+		require.NoError(t, err)
+		require.NotEqual(t, 0, n)
+
 		err = client.Send()
 		require.NoError(t, err)
 
 		err = client.Receive()
 		require.NoError(t, err)
-		require.Equal(t, str2, out.String())
+		require.Equal(t, str2, out.buf.Bytes())
 	}()
 
 	go func() {
@@ -58,9 +61,9 @@ func TestTelnetClientBasic(t *testing.T) {
 		request := make([]byte, 1024)
 		n, err := conn.Read(request)
 		require.NoError(t, err)
-		require.Equal(t, str1, string(request)[:n])
+		require.Equal(t, str1, request[:n])
 
-		n, err = conn.Write([]byte(str2))
+		n, err = conn.Write(str2)
 		require.NoError(t, err)
 		require.NotEqual(t, 0, n)
 	}()
@@ -69,12 +72,13 @@ func TestTelnetClientBasic(t *testing.T) {
 }
 
 func TestTelnetClientNoExistServer(t *testing.T) {
-	in := &bytes.Buffer{}
-	out := &bytes.Buffer{}
+	in := &Buffer{}
+	out := &Buffer{}
 	timeout, err := time.ParseDuration("10s")
 	require.NoError(t, err)
 	client := NewTelnetClient("noexist:10", timeout, ioutil.NopCloser(in), out)
-	require.EqualError(t, client.Connect(), "dial tcp: lookup noexist: no such host")
+	// timeout or no such host
+	require.Error(t, client.Connect())
 }
 
 func TestTelnetClientClosedClient(t *testing.T) {
@@ -82,8 +86,8 @@ func TestTelnetClientClosedClient(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { require.NoError(t, l.Close()) }()
 
-	in := &bytes.Buffer{}
-	out := &bytes.Buffer{}
+	in := &Buffer{}
+	out := &Buffer{}
 
 	timeout, err := time.ParseDuration("10s")
 	require.NoError(t, err)
@@ -93,7 +97,7 @@ func TestTelnetClientClosedClient(t *testing.T) {
 
 	require.NoError(t, client.Close())
 	time.Sleep(3 * time.Second)
-	in.WriteString("hello\n")
+	in.Write([]byte("hello\n"))
 	err = client.Send()
 	require.Error(t, err)
 }
@@ -102,10 +106,10 @@ func TestTelnetClientClosedServer(t *testing.T) {
 	l, err := net.Listen("tcp", "127.0.0.1:")
 	require.NoError(t, err)
 
-	in := &bytes.Buffer{}
-	out := &bytes.Buffer{}
+	in := &Buffer{}
+	out := &Buffer{}
 
-	var buf bytes.Buffer
+	var buf Buffer
 	log.SetOutput(&buf)
 
 	timeout, err := time.ParseDuration("10s")
@@ -113,13 +117,12 @@ func TestTelnetClientClosedServer(t *testing.T) {
 
 	client := NewTelnetClient(l.Addr().String(), timeout, ioutil.NopCloser(in), out)
 	require.NoError(t, client.Connect())
-	defer func() { require.Error(t, client.Close()) }()
 
 	require.NoError(t, l.Close())
 	time.Sleep(3 * time.Second)
 
-	in.WriteString("hello\n")
-
+	// connection was closed with the server closing
+	require.Error(t, client.Close())
 	res := strings.Contains(buf.String(), "attempt to write to a closed server") ||
 		strings.Contains(buf.String(), "attempt to read from a closed server")
 	require.True(t, res)
@@ -138,8 +141,8 @@ func TestTelnetClientWithContext(t *testing.T) {
 	defer func() { require.NoError(t, l.Close()) }()
 
 	timeout, err := time.ParseDuration("10s")
-	in := &bytes.Buffer{}
-	out := &bytes.Buffer{}
+	in := &Buffer{}
+	out := &Buffer{}
 	require.NoError(t, err)
 	var conn net.Conn
 	var ctx context.Context
@@ -165,7 +168,6 @@ func TestTelnetClientWithContext(t *testing.T) {
 	wg.Wait()
 
 	defer func() { require.NoError(t, conn.Close()) }()
-	defer func() { require.NoError(t, client.Close()) }()
 
 	n, err := conn.Write(str1)
 	require.NoError(t, err)
@@ -182,5 +184,6 @@ func TestTelnetClientWithContext(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEqual(t, 0, n)
 
-	require.False(t, strings.Contains(out.String(), string(checkStr)))
+	require.NoError(t, client.Close())
+	require.False(t, bytes.Contains(out.buf.Bytes(), checkStr))
 }
