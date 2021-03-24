@@ -8,7 +8,38 @@ type (
 
 type Stage func(in In) (out Out)
 
+func makeInteruptable(in In, doneCh Out) Out {
+	out := make(Bi)
+
+	go func() {
+		defer close(out)
+		for {
+			select {
+			case <-doneCh:
+				return
+			default:
+			}
+			select {
+			case v, ok := <-in:
+				if !ok {
+					return
+				}
+				out <- v
+			case <-doneCh:
+				return
+			}
+		}
+	}()
+
+	return out
+}
+
 func ExecutePipeline(in In, done In, stages ...Stage) Out {
-	// Place your code here.
-	return nil
+	var out In = in
+	for _, s := range stages {
+		inWrap := makeInteruptable(out, done)
+		out = s(inWrap)
+	}
+
+	return out
 }
