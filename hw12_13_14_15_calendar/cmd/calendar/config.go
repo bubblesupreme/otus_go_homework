@@ -35,10 +35,11 @@ type DBMSConf struct {
 type ServerConf struct {
 	Port int    `mapstructure:"port"`
 	Host string `mapstructure:"host"`
+	Type string `mapstructure:"type"` // grpc, hhtp
 }
 
 type StorageConf struct {
-	Type string `mapstructure:"type"`
+	Type string `mapstructure:"type"` // sql, memory
 }
 
 func NewConfig() (Config, error) {

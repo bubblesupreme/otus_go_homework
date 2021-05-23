@@ -10,6 +10,7 @@ type Date struct {
 	Hour    int
 	Minutes int
 	Seconds int
+	WeekDay int
 }
 
 func ParseTime(t time.Time) Date {
@@ -17,6 +18,7 @@ func ParseTime(t time.Time) Date {
 	res.Year, res.Month, res.Day = t.Date()
 	res.Hour, res.Minutes, res.Seconds = t.Clock()
 	_, res.Week = t.ISOWeek()
+	res.WeekDay = int(t.Weekday())
 
 	return res
 }

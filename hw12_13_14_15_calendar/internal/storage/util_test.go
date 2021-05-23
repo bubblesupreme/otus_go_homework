@@ -15,6 +15,7 @@ const (
 	hour    = 5
 	minutes = 46
 	seconds = 13
+	weekday = 1
 )
 
 func TestUtilParseTime(t *testing.T) {
@@ -28,10 +29,20 @@ func TestUtilParseTime(t *testing.T) {
 	require.Equal(t, hour, d.Hour)
 	require.Equal(t, minutes, d.Minutes)
 	require.Equal(t, seconds, d.Seconds)
+	require.Equal(t, weekday, d.WeekDay)
 }
 
 func TestUtilToDate(t *testing.T) {
-	d := Date{year, month, week, day, hour, minutes, seconds}
+	d := Date{
+		year,
+		month,
+		week,
+		day,
+		hour,
+		minutes,
+		seconds,
+		weekday,
+	}
 	checkTime := DateToTime(d)
 	require.Equal(t, time.Date(year, month, day, hour, minutes, seconds, 0, time.UTC), checkTime)
 }

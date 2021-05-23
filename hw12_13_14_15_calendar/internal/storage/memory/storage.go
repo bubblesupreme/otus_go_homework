@@ -2,17 +2,13 @@ package memorystorage
 
 import (
 	"context"
-	"errors"
 	"sync"
 	"time"
 
 	"github.com/bubblesupreme/otus_go_homework/hw12_13_14_15_calendar/internal/storage"
 )
 
-var (
-	ErrNotFoundEvent = errors.New("event not found")
-	generator        = idGenerator{-1}
-)
+var generator = idGenerator{-1}
 
 type memoryStorage struct {
 	sync.RWMutex
@@ -27,7 +23,7 @@ type checkTime struct {
 }
 
 type idGenerator struct {
-	counter int
+	counter int32
 }
 
 func NewStorage() storage.Storage {
@@ -36,12 +32,12 @@ func NewStorage() storage.Storage {
 	}
 }
 
-func (g *idGenerator) generateID() int {
+func (g *idGenerator) generateID() int32 {
 	g.counter++
 	return g.counter
 }
 
-func (s *memoryStorage) CreateEvent(ctx context.Context, e storage.Event) (int, error) {
+func (s *memoryStorage) CreateEvent(ctx context.Context, e storage.Event) (int32, error) {
 	s.Lock()
 	defer s.Unlock()
 
@@ -71,10 +67,10 @@ func (s *memoryStorage) UpdateEvent(ctx context.Context, event storage.Event) er
 			}
 		}
 	}
-	return ErrNotFoundEvent
+	return storage.ErrNotFoundEvent
 }
 
-func (s *memoryStorage) RemoveEvent(ctx context.Context, id int) error {
+func (s *memoryStorage) RemoveEvent(ctx context.Context, id int32) error {
 	s.Lock()
 	defer s.Unlock()
 
@@ -90,7 +86,7 @@ func (s *memoryStorage) RemoveEvent(ctx context.Context, id int) error {
 			}
 		}
 	}
-	return ErrNotFoundEvent
+	return storage.ErrNotFoundEvent
 }
 
 func (s *memoryStorage) GetDayEvents(ctx context.Context, eTime time.Time) ([]storage.Event, error) {
