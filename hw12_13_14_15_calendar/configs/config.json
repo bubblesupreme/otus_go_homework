@@ -1,0 +1,19 @@
+{
+  "logger": {
+    "level": "info",
+    "path" : "logs/"
+  },
+  "database": {
+    "login": "postgres",
+    "port": 5432,
+    "dbname": "calendar",
+    "host": "localhost"
+  },
+  "server": {
+    "port": 8080,
+    "host": "localhost"
+  },
+  "storage": {
+    "type": "sql"
+  }
+}

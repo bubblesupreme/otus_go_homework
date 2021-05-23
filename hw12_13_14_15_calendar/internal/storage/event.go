@@ -1,7 +1,10 @@
 package storage
 
+import "time"
+
 type Event struct {
-	ID    string
-	Title string
-	// TODO
+	ID       int
+	Title    string
+	ClientID int
+	Time     time.Time
 }
