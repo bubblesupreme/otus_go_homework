@@ -7,8 +7,10 @@ import (
 	"github.com/spf13/viper"
 )
 
-const defaultEnvString = "-1" // default value for fields which can be initialized by environment variables
-const defaultEnvInt = -1 // default value for fields which can be initialized by environment variables
+const (
+	defaultEnvString = "-1" // default value for fields which can be initialized by environment variables
+	defaultEnvInt    = -1   // default value for fields which can be initialized by environment variables
+)
 
 type Config struct {
 	Logger   LoggerConf
