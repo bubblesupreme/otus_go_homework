@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -9,6 +10,9 @@ import (
 	"path"
 	"syscall"
 	"time"
+
+	"github.com/bubblesupreme/otus_go_homework/hw12_13_14_15_calendar/internal/server"
+	internalgrpc "github.com/bubblesupreme/otus_go_homework/hw12_13_14_15_calendar/internal/server/grpc"
 
 	"github.com/bubblesupreme/otus_go_homework/hw12_13_14_15_calendar/internal/app"
 	internalhttp "github.com/bubblesupreme/otus_go_homework/hw12_13_14_15_calendar/internal/server/http"
@@ -27,7 +31,11 @@ const (
 	layoutTime = "01-02-2006-15-04-05"
 )
 
-var cfgFile string
+var (
+	cfgFile        string
+	ErrStorageType = errors.New("storage type is not supported")
+	ErrServerType  = errors.New("server type is not supported")
+)
 
 // rootCmd represents the base command when called without any subcommands.
 var rootCmd = &cobra.Command{
@@ -128,11 +136,15 @@ func run(_ *cobra.Command, _ []string) {
 			return err
 		}
 
-		calendar := app.New(storage)
+		calendarApp := app.NewApp(storage)
 
-		server := internalhttp.NewServer(calendar, config.Server.Port, config.Server.Host)
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
+		server, err := newServer(ctx, calendarApp, config.Server)
+		if err != nil {
+			log.Error("failed to create server", log.Fields{"type": config.Storage.Type})
+			return err
+		}
 
 		go func() {
 			signals := make(chan os.Signal, 1)
@@ -147,16 +159,13 @@ func run(_ *cobra.Command, _ []string) {
 			signal.Stop(signals)
 			cancel()
 
-			ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
-			defer cancel()
-
-			if err := server.Stop(ctx); err != nil {
+			if err := server.Stop(); err != nil {
 				log.Error("failed to stop http server: "+err.Error(), nil)
 			}
 		}()
 
 		log.Info("calendar is running...", nil)
-		if err := server.Start(ctx); err != nil {
+		if err := server.Start(); err != nil {
 			log.Error("failed to start http server", nil)
 			cancel()
 			return err
@@ -175,7 +184,18 @@ func newStorage(t string, c DBMSConf) (storage.Storage, error) {
 	case "sql":
 		return sqlstorage.NewStorage(c.Login, c.Password, c.Port, c.Host, c.DBName)
 	default:
-		return nil, storage.ErrStorageType
+		return nil, ErrStorageType
+	}
+}
+
+func newServer(ctx context.Context, calendarApp *app.App, c ServerConf) (server.Server, error) {
+	switch c.Type {
+	case "grpc":
+		return internalgrpc.NewServer(ctx, calendarApp, c.Port, c.Host)
+	case "http":
+		return internalhttp.NewServer(ctx, calendarApp, c.Port, c.Host)
+	default:
+		return nil, ErrServerType
 	}
 }
 

@@ -6,16 +6,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/felixge/httpsnoop"
-
 	log "github.com/bubblesupreme/otus_go_homework/hw12_13_14_15_calendar/internal/logger"
+	"github.com/felixge/httpsnoop"
 )
 
 func loggingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t := time.Now()
-		next.ServeHTTP(w, r)
-
 		m := httpsnoop.CaptureMetrics(next, w, r)
 		log.Info(fmt.Sprintf("%s [%s] %s %s %s %d %d %s", getIP(r), t.String(), r.Method, r.URL.String(), r.Proto, 200, m.Duration, r.Header.Get("User-Agent")), nil)
 	})

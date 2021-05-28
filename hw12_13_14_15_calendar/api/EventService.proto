@@ -1,7 +1,38 @@
 syntax = "proto3";
 
+import "google/protobuf/timestamp.proto";
+
 package event;
 
+option go_package = "github.com/bubblesupreme/hw12_13_14_15_calendar/eventspb";
+
+service EventService {
+	rpc CreateEvent(Event) returns(EventID);
+	rpc UpdateEvent(Event) returns(Empty);
+	rpc RemoveEvent(EventID) returns(Empty);
+	rpc GetDayEvents(Time) returns(Events);
+	rpc GetWeekEvents(Time) returns(Events);
+	rpc GetMonthEvents(Time) returns(Events);
+}
+
 message Event {
-    // TODO
+	int32 ID = 1;
+	string Title = 2;
+	int32 ClientID = 3;
+	google.protobuf.Timestamp Time = 4;
+}
+
+message EventID {
+	int32 ID = 1;
+}
+
+message Events {
+	repeated Event Events = 1;
+}
+
+message Time {
+	google.protobuf.Timestamp Time = 1;
+}
+
+message Empty {
 }

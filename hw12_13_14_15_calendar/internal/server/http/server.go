@@ -6,59 +6,38 @@ import (
 	"net/http"
 	"strconv"
 
-	log "github.com/bubblesupreme/otus_go_homework/hw12_13_14_15_calendar/internal/logger"
-	"github.com/gorilla/mux"
+	eventspb "github.com/bubblesupreme/otus_go_homework/hw12_13_14_15_calendar/api"
+	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+
+	"github.com/bubblesupreme/otus_go_homework/hw12_13_14_15_calendar/internal/app"
 )
 
 type Server struct {
-	port   int
-	host   string
-	router *mux.Router
 	server *http.Server
-	app    Application
+	mux    *runtime.ServeMux
 }
 
-type Application interface{}
-
-func homeHandler(w http.ResponseWriter, r *http.Request) {
-	_, err := w.Write([]byte("Home"))
-	if err != nil {
-		log.Error(err.Error(), nil)
-	}
-}
-
-func helloHandler(w http.ResponseWriter, h *http.Request) {
-	_, err := w.Write([]byte("Hello world!"))
-	if err != nil {
-		log.Error(err.Error(), nil)
-	}
-}
-
-func NewServer(app Application, port int, host string) *Server {
-	r := mux.NewRouter()
-	r.HandleFunc("/", homeHandler)
-	r.HandleFunc("/hello", helloHandler)
-	r.Use(loggingMiddleware)
-	http.Handle("/", r)
-	return &Server{
-		port:   port,
-		host:   host,
-		router: r,
-		app:    app,
-	}
-}
-
-func (s *Server) Start(ctx context.Context) error {
-	s.server = &http.Server{
-		Addr:    net.JoinHostPort(s.host, strconv.Itoa(s.port)),
-		Handler: s.router,
+func NewServer(ctx context.Context, app *app.App, port int, host string) (*Server, error) {
+	mux := runtime.NewServeMux(
+		runtime.WithMarshalerOption("application/json", &runtime.JSONBuiltin{}))
+	err := eventspb.RegisterEventServiceHandlerServer(ctx, mux, app)
+	s := http.Server{
+		Addr:    net.JoinHostPort("", strconv.Itoa(port)),
+		Handler: loggingMiddleware(mux),
 		BaseContext: func(net.Listener) context.Context {
 			return ctx
 		},
 	}
+	return &Server{
+		server: &s,
+		mux:    mux,
+	}, err
+}
+
+func (s *Server) Start() error {
 	return s.server.ListenAndServe()
 }
 
-func (s *Server) Stop(ctx context.Context) error {
-	return s.server.Shutdown(ctx)
+func (s *Server) Stop() error {
+	return s.server.Close()
 }

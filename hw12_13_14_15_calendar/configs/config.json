@@ -11,7 +11,8 @@
   },
   "server": {
     "port": 8080,
-    "host": "localhost"
+    "host": "localhost",
+    "type": "http"
   },
   "storage": {
     "type": "sql"

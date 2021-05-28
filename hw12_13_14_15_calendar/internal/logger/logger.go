@@ -23,6 +23,10 @@ type Logger struct {
 	log *logrus.Logger
 }
 
+func GetLogger() *logrus.Logger {
+	return logger.log
+}
+
 func SetLevel(levelStr string) {
 	level, err := logrus.ParseLevel(levelStr)
 	if err != nil {

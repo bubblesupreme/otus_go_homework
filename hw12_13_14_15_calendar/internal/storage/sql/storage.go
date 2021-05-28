@@ -12,7 +12,6 @@ import (
 
 const (
 	driver = "postgres"
-	table  = "events"
 )
 
 type sqlStorage struct {
@@ -57,7 +56,7 @@ func (s *sqlStorage) Close(ctx context.Context) error {
 	return s.db.Close(ctx)
 }
 
-func (s *sqlStorage) CreateEvent(ctx context.Context, e storage.Event) (int, error) {
+func (s *sqlStorage) CreateEvent(ctx context.Context, e storage.Event) (int32, error) {
 	if err := s.Connect(ctx); err != nil {
 		return -1, err
 	}
@@ -68,14 +67,14 @@ func (s *sqlStorage) CreateEvent(ctx context.Context, e storage.Event) (int, err
 	}()
 
 	d := storage.ParseTime(e.Time)
-	id := -1
+	var id int32 = 1
 	err := s.db.QueryRow(ctx,
 		`
 INSERT 
-INTO $1 
+INTO events 
 (title, client_id, "year", "month", "day", "hour", "minutes", "seconds") 
-VALUES ("$2", $3, $4, $5, $6, $7, $8, $9) 
-RETURNING id;`, table, e.Title, e.ClientID, d.Year, d.Month, d.Day, d.Hour, d.Minutes, d.Seconds).Scan(&id)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8) 
+RETURNING id;`, e.Title, e.ClientID, d.Year, d.Month, d.Day, d.Hour, d.Minutes, d.Seconds).Scan(&id)
 
 	return id, err
 }
@@ -91,24 +90,31 @@ func (s *sqlStorage) UpdateEvent(ctx context.Context, e storage.Event) error {
 	}()
 
 	date := storage.ParseTime(e.Time)
-	_, err := s.db.Query(ctx,
+	rows, err := s.db.Exec(ctx,
 		`
-UPDATE $1 
-SET title = $2,
-    client_id = $3,
-    "year" = $4,
-    "month" = $5,
-    "day" = $6,
-    "hour" = $7,
-    "minutes" = $8,
-    "seconds" = $9
-WHERE id = $10;`,
-		table, e.Title, e.ClientID, date.Year, int(date.Month), date.Day, date.Hour, date.Minutes, date.Seconds, e.ID)
+UPDATE events 
+SET title = $1,
+    client_id = $2,
+    "year" = $3,
+    "month" = $4,
+    "day" = $5,
+    "hour" = $6,
+    "minutes" = $7,
+    "seconds" = $8
+WHERE id = $9;`,
+		e.Title, e.ClientID, date.Year, int(date.Month), date.Day, date.Hour, date.Minutes, date.Seconds, e.ID)
+
+	switch {
+	case rows.RowsAffected() == 0:
+		return storage.ErrNotFoundEvent
+	case rows.RowsAffected() > 1:
+		return storage.ErrFoundMultipleEvents
+	}
 
 	return err
 }
 
-func (s *sqlStorage) RemoveEvent(ctx context.Context, id int) error {
+func (s *sqlStorage) RemoveEvent(ctx context.Context, id int32) error {
 	if err := s.Connect(ctx); err != nil {
 		return err
 	}
@@ -118,21 +124,38 @@ func (s *sqlStorage) RemoveEvent(ctx context.Context, id int) error {
 		}
 	}()
 
-	_, err := s.db.Query(ctx,
+	rows, err := s.db.Exec(ctx,
 		`
 DELETE 
-FROM $1 
-WHERE id = $2;`, table, id)
+FROM events
+WHERE id = $1;`, id)
+
+	switch {
+	case rows.RowsAffected() == 0:
+		return storage.ErrNotFoundEvent
+	case rows.RowsAffected() > 1:
+		return storage.ErrFoundMultipleEvents
+	}
+
 	return err
 }
 
 func (s *sqlStorage) GetDayEvents(ctx context.Context, eTime time.Time) ([]storage.Event, error) {
+	if err := s.Connect(ctx); err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := s.Close(ctx); err != nil {
+			log.Fatal(fmt.Sprintf("failed to close connection: %s", err), log.Fields{})
+		}
+	}()
+
 	date := storage.ParseTime(eTime)
 	rows, err := s.db.Query(ctx,
 		`
 SELECT * 
-FROM $1 
-WHERE ("year" = $2 AND "month" = $3 AND "day" = $4);`, table, date.Year, int(date.Month), date.Day)
+FROM events 
+WHERE ("year" = $1 AND "month" = $2 AND "day" = $3);`, date.Year, int(date.Month), date.Day)
 	if err != nil {
 		return nil, err
 	}
@@ -151,14 +174,14 @@ func (s *sqlStorage) GetWeekEvents(ctx context.Context, eTime time.Time) ([]stor
 	}()
 
 	date := storage.ParseTime(eTime)
-	startDay := date.Day - date.Week + 1
-	endDay := date.Day + (7 - date.Week)
+	startDay := date.Day - date.WeekDay + 1
+	endDay := date.Day + (7 - date.WeekDay)
 
 	rows, err := s.db.Query(ctx,
 		`
 SELECT * 
-FROM $1 
-WHERE ("year" = $2 AND "month" = $3 AND "day" >= $4 AND "day" <= $5);`, table, date.Year, int(date.Month), startDay, endDay)
+FROM events 
+WHERE ("year" = $1 AND "month" = $2 AND "day" >= $3 AND "day" <= $4);`, date.Year, int(date.Month), startDay, endDay)
 	if err != nil {
 		return nil, err
 	}
@@ -180,8 +203,8 @@ func (s *sqlStorage) GetMonthEvents(ctx context.Context, eTime time.Time) ([]sto
 	rows, err := s.db.Query(ctx,
 		`
 SELECT * 
-FROM $1 
-WHERE ("year" = $2 AND "month" = $3);`, table, date.Year, int(date.Month))
+FROM events 
+WHERE ("year" = $1 AND "month" = $2);`, date.Year, int(date.Month))
 	if err != nil {
 		return nil, err
 	}

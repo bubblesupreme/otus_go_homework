@@ -14,10 +14,10 @@ func TestStorageFull(t *testing.T) {
 	s := NewStorage()
 
 	ctx := context.Background()
-	expectedDayIDs := make([]int, 0)
-	expectedWeekIDs := make([]int, 0)
-	expectedMonthIDs := make([]int, 0)
-	expectedMonthIDs2 := make([]int, 0)
+	expectedDayIDs := make([]int32, 0)
+	expectedWeekIDs := make([]int32, 0)
+	expectedMonthIDs := make([]int32, 0)
+	expectedMonthIDs2 := make([]int32, 0)
 
 	id, err := s.CreateEvent(ctx, storage.Event{
 		Title:    "Test 0 0",
@@ -57,7 +57,7 @@ func TestStorageFull(t *testing.T) {
 
 	events, err := s.GetDayEvents(ctx, time.Date(2021, 2, 1, 5, 0, 0, 0, time.UTC))
 	require.Nil(t, err)
-	eventIds := make([]int, len(events))
+	eventIds := make([]int32, len(events))
 	for i, e := range events {
 		eventIds[i] = e.ID
 	}
@@ -65,7 +65,7 @@ func TestStorageFull(t *testing.T) {
 
 	events, err = s.GetWeekEvents(ctx, time.Date(2021, 2, 1, 5, 0, 0, 0, time.UTC))
 	require.Nil(t, err)
-	eventIds = make([]int, len(events))
+	eventIds = make([]int32, len(events))
 	for i, e := range events {
 		eventIds[i] = e.ID
 	}
@@ -75,7 +75,7 @@ func TestStorageFull(t *testing.T) {
 
 	events, err = s.GetMonthEvents(ctx, time.Date(2021, 2, 1, 5, 0, 0, 0, time.UTC))
 	require.Nil(t, err)
-	eventIds = make([]int, len(events))
+	eventIds = make([]int32, len(events))
 	for i, e := range events {
 		eventIds[i] = e.ID
 	}
@@ -90,7 +90,7 @@ func TestStorageFull(t *testing.T) {
 
 	events, err = s.GetMonthEvents(ctx, time.Date(2021, 2, 1, 5, 0, 0, 0, time.UTC))
 	require.Nil(t, err)
-	eventIds = make([]int, len(events))
+	eventIds = make([]int32, len(events))
 	for i, e := range events {
 		eventIds[i] = e.ID
 	}
@@ -101,7 +101,7 @@ func TestStorageNoExistRemove(t *testing.T) {
 	s := NewStorage()
 
 	ctx := context.Background()
-	require.EqualError(t, s.RemoveEvent(ctx, 1), ErrNotFoundEvent.Error())
+	require.EqualError(t, s.RemoveEvent(ctx, 1), storage.ErrNotFoundEvent.Error())
 }
 
 func TestStorageNoExistUpdate(t *testing.T) {
@@ -112,7 +112,7 @@ func TestStorageNoExistUpdate(t *testing.T) {
 		Title:    "Test 0 0",
 		ClientID: 0,
 		Time:     time.Date(2021, 2, 1, 0, 0, 0, 0, time.UTC),
-	}), ErrNotFoundEvent.Error())
+	}), storage.ErrNotFoundEvent.Error())
 }
 
 func TestStorageCancelContext(t *testing.T) {
@@ -133,7 +133,7 @@ func TestStorageCrowdedHours(t *testing.T) {
 
 	ctx := context.Background()
 
-	expectedIds := make([]int, 1)
+	expectedIds := make([]int32, 1)
 	var err error
 
 	expectedIds[0], err = s.CreateEvent(ctx, storage.Event{
@@ -152,7 +152,7 @@ func TestStorageCrowdedHours(t *testing.T) {
 
 	events, err := s.GetDayEvents(ctx, time.Date(2021, 2, 1, 5, 0, 0, 0, time.UTC))
 	require.Nil(t, err)
-	eventIds := make([]int, len(events))
+	eventIds := make([]int32, len(events))
 	for i, e := range events {
 		eventIds[i] = e.ID
 	}
