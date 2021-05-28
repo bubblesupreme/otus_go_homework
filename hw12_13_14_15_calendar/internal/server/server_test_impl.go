@@ -46,17 +46,9 @@ func GetSQLStorage() (storage.Storage, error) {
 		port, viper.Get("dbhost").(string), viper.Get("dbname").(string))
 }
 
-func EmptyStorageImpl(t *testing.T, server Server, client TestClient) {
+func EmptyStorageImpl(t *testing.T, client TestClient) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go func() {
-		server.Start()
-	}()
-	defer func() {
-		assert.NoError(t, server.Stop())
-	}()
-
-	time.Sleep(5 * time.Second) // waiting for server start
 
 	date := time.Date(2021, 3, 1, 0, 0, 0, 0, time.UTC)
 	timestmp := eventspb.Time{
@@ -89,17 +81,9 @@ func EmptyStorageImpl(t *testing.T, server Server, client TestClient) {
 	assert.Error(t, err)
 }
 
-func CommonImpl(t *testing.T, server Server, client TestClient) {
+func CommonImpl(t *testing.T, client TestClient) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go func() {
-		server.Start()
-	}()
-	defer func() {
-		assert.NoError(t, server.Stop())
-	}()
-
-	time.Sleep(5 * time.Second) // waiting for server start
 
 	date0 := time.Date(2021, 3, 1, 0, 0, 0, 0, time.UTC)
 	expEvents := make([]eventspb.Event, 2)

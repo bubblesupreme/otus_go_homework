@@ -7,22 +7,17 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
-	"net"
 	"net/http"
-	"strconv"
+	"net/http/httptest"
 	"testing"
 
 	eventspb "github.com/bubblesupreme/otus_go_homework/hw12_13_14_15_calendar/api"
+	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 
 	"github.com/bubblesupreme/otus_go_homework/hw12_13_14_15_calendar/internal/app"
 	"github.com/bubblesupreme/otus_go_homework/hw12_13_14_15_calendar/internal/server"
 	"github.com/stretchr/testify/assert"
 	spb "google.golang.org/genproto/googleapis/rpc/status"
-)
-
-const (
-	host = "127.0.0.1"
-	port = 8080
 )
 
 type TestClientHTTP struct {
@@ -31,7 +26,7 @@ type TestClientHTTP struct {
 
 func (t TestClientHTTP) CreateEvent(_ context.Context, in *eventspb.Event) (*eventspb.EventID, error) {
 	res := eventspb.EventID{}
-	resp, err := doRequest(fmt.Sprintf("http://%s/event.EventService/CreateEvent", t.addr), in)
+	resp, err := doRequest(fmt.Sprintf("%s/event.EventService/CreateEvent", t.addr), in)
 	if err != nil {
 		return &res, err
 	}
@@ -41,7 +36,7 @@ func (t TestClientHTTP) CreateEvent(_ context.Context, in *eventspb.Event) (*eve
 
 func (t TestClientHTTP) UpdateEvent(_ context.Context, in *eventspb.Event) (*eventspb.Empty, error) {
 	res := eventspb.Empty{}
-	resp, err := doRequest(fmt.Sprintf("http://%s/event.EventService/UpdateEvent", t.addr), in)
+	resp, err := doRequest(fmt.Sprintf("%s/event.EventService/UpdateEvent", t.addr), in)
 	if err != nil {
 		return &res, err
 	}
@@ -51,7 +46,7 @@ func (t TestClientHTTP) UpdateEvent(_ context.Context, in *eventspb.Event) (*eve
 
 func (t TestClientHTTP) RemoveEvent(_ context.Context, in *eventspb.EventID) (*eventspb.Empty, error) {
 	res := eventspb.Empty{}
-	resp, err := doRequest(fmt.Sprintf("http://%s/event.EventService/RemoveEvent", t.addr), in)
+	resp, err := doRequest(fmt.Sprintf("%s/event.EventService/RemoveEvent", t.addr), in)
 	if err != nil {
 		return &res, err
 	}
@@ -61,7 +56,7 @@ func (t TestClientHTTP) RemoveEvent(_ context.Context, in *eventspb.EventID) (*e
 
 func (t TestClientHTTP) GetDayEvents(_ context.Context, in *eventspb.Time) (*eventspb.Events, error) {
 	res := eventspb.Events{}
-	resp, err := doRequest(fmt.Sprintf("http://%s/event.EventService/GetDayEvents", t.addr), in)
+	resp, err := doRequest(fmt.Sprintf("%s/event.EventService/GetDayEvents", t.addr), in)
 	if err != nil {
 		return &res, err
 	}
@@ -71,7 +66,7 @@ func (t TestClientHTTP) GetDayEvents(_ context.Context, in *eventspb.Time) (*eve
 
 func (t TestClientHTTP) GetWeekEvents(_ context.Context, in *eventspb.Time) (*eventspb.Events, error) {
 	res := eventspb.Events{}
-	resp, err := doRequest(fmt.Sprintf("http://%s/event.EventService/GetWeekEvents", t.addr), in)
+	resp, err := doRequest(fmt.Sprintf("%s/event.EventService/GetWeekEvents", t.addr), in)
 	if err != nil {
 		return &res, err
 	}
@@ -81,7 +76,7 @@ func (t TestClientHTTP) GetWeekEvents(_ context.Context, in *eventspb.Time) (*ev
 
 func (t TestClientHTTP) GetMonthEvents(_ context.Context, in *eventspb.Time) (*eventspb.Events, error) {
 	res := eventspb.Events{}
-	resp, err := doRequest(fmt.Sprintf("http://%s/event.EventService/GetMonthEvents", t.addr), in)
+	resp, err := doRequest(fmt.Sprintf("%s/event.EventService/GetMonthEvents", t.addr), in)
 	if err != nil {
 		return &res, err
 	}
@@ -130,34 +125,51 @@ func getResponse(r *http.Response, v interface{}) error {
 	return json.Unmarshal(body, v)
 }
 
-func doTest(t *testing.T, testFn func(t *testing.T, server server.Server, client server.TestClient)) {
+func TestHTTP(t *testing.T) {
+	t.Run("EmptyMemoryStorage", func(t *testing.T) { doTestMemory(t, server.EmptyStorageImpl) })
+	t.Run("EmptySQLStorage", func(t *testing.T) { /*doTestSQL(t, server.EmptyStorageImpl)*/ })
+	t.Run("CommonMemoryStorage", func(t *testing.T) { doTestMemory(t, server.CommonImpl) })
+	t.Run("CommonSQLStorage", func(t *testing.T) { /*doTestSQL(t, server.CommonImpl)*/ })
+}
+
+func doTestMemory(t *testing.T, testFn func(t *testing.T, client server.TestClient)) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	storage, err := server.GetMemoryStorage()
+	assert.NoError(t, err)
+	a := app.NewApp(storage)
+
+	muxMem := runtime.NewServeMux(
+		runtime.WithMarshalerOption("application/json", &runtime.JSONBuiltin{}))
+	assert.NoError(t, eventspb.RegisterEventServiceHandlerServer(ctx, muxMem, a))
+
+	srv := httptest.NewServer(muxMem)
 	client := TestClientHTTP{
-		addr: net.JoinHostPort(host, strconv.Itoa(port)),
+		addr: srv.URL,
 	}
 
-	storageMem, err := server.GetMemoryStorage()
-	assert.NoError(t, err)
-	aMem := app.NewApp(storageMem)
-	sMem, err := NewServer(ctx, aMem, port, host)
-	assert.NoError(t, err)
-	testFn(t, sMem, client)
+	defer srv.Close()
+	testFn(t, client)
+}
 
+func doTestSQL(t *testing.T, testFn func(t *testing.T, client server.TestClient)) { //nolint:deadcode,unused
 	// TODO: docker compose
-	// storageSQL, err := server.GetSQLStorage()
-	// assert.NoError(t, err)
-	// aSQL := app.NewApp(storageSQL)
-	// sSQL, err := NewServer(ctx, aSQL, port, host)
-	// assert.NoError(t, err)
-	// testFn(t, sSQL, client)
-}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-func TestEmptyStorage(t *testing.T) {
-	doTest(t, server.EmptyStorageImpl)
-}
+	storage, err := server.GetSQLStorage()
+	assert.NoError(t, err)
+	a := app.NewApp(storage)
+	mux := runtime.NewServeMux(
+		runtime.WithMarshalerOption("application/json", &runtime.JSONBuiltin{}))
+	assert.NoError(t, eventspb.RegisterEventServiceHandlerServer(ctx, mux, a))
 
-func TestCommon(t *testing.T) {
-	doTest(t, server.CommonImpl)
+	srv := httptest.NewServer(mux)
+	client := TestClientHTTP{
+		addr: srv.URL,
+	}
+
+	defer srv.Close()
+	testFn(t, client)
 }

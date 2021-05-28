@@ -5,6 +5,7 @@ import (
 	"net"
 	"strconv"
 	"testing"
+	"time"
 
 	eventspb "github.com/bubblesupreme/otus_go_homework/hw12_13_14_15_calendar/api"
 	"google.golang.org/grpc"
@@ -47,7 +48,14 @@ func (t TestClientGRPC) GetMonthEvents(ctx context.Context, in *eventspb.Time) (
 	return t.grpcClient.GetMonthEvents(ctx, in)
 }
 
-func doTest(t *testing.T, testFn func(t *testing.T, server server.Server, client server.TestClient)) {
+func TestGRPC(t *testing.T) {
+	t.Run("EmptyMemoryStorage", func(t *testing.T) { doTestMemory(t, server.EmptyStorageImpl) })
+	t.Run("EmptySQLStorage", func(t *testing.T) { /*doTestSQL(t, server.EmptyStorageImpl)*/ })
+	t.Run("CommonMemoryStorage", func(t *testing.T) { doTestMemory(t, server.CommonImpl) })
+	t.Run("CommonSQLStorage", func(t *testing.T) { /*doTestSQL(t, server.CommonImpl)*/ })
+}
+
+func doTestMemory(t *testing.T, testFn func(t *testing.T, client server.TestClient)) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -57,26 +65,42 @@ func doTest(t *testing.T, testFn func(t *testing.T, server server.Server, client
 		grpcClient: eventspb.NewEventServiceClient(conn),
 	}
 
-	storageMem, err := server.GetMemoryStorage()
+	storage, err := server.GetMemoryStorage()
 	assert.NoError(t, err)
-	aMem := app.NewApp(storageMem)
-	sMem, err := NewServer(ctx, aMem, port, host)
+	a := app.NewApp(storage)
+	srv, err := NewServer(ctx, a, port, host)
 	assert.NoError(t, err)
-	testFn(t, sMem, client)
+	go func() {
+		assert.NoError(t, srv.Start())
+	}()
+	defer func() {
+		assert.NoError(t, srv.Stop())
+	}()
+	time.Sleep(5 * time.Second) // waiting for server start
+	testFn(t, client)
+}
 
+func doTestSQL(t *testing.T, testFn func(t *testing.T, client server.TestClient)) { //nolint:deadcode,unused
 	// TODO: docker compose
-	// storageSQL, err := server.GetSQLStorage()
-	// assert.NoError(t, err)
-	// aSQL := app.NewApp(storageSQL)
-	// sSQL, err := NewServer(ctx, aSQL, port, host)
-	// assert.NoError(t, err)
-	// testFn(t, sSQL, client)
-}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-func TestEmptyStorage(t *testing.T) {
-	doTest(t, server.EmptyStorageImpl)
-}
-
-func TestCommon(t *testing.T) {
-	doTest(t, server.CommonImpl)
+	conn, err := grpc.Dial(net.JoinHostPort(host, strconv.Itoa(port)), grpc.WithInsecure())
+	assert.NoError(t, err)
+	client := TestClientGRPC{
+		grpcClient: eventspb.NewEventServiceClient(conn),
+	}
+	storage, err := server.GetSQLStorage()
+	assert.NoError(t, err)
+	a := app.NewApp(storage)
+	srv, err := NewServer(ctx, a, port, host)
+	assert.NoError(t, err)
+	go func() {
+		assert.NoError(t, srv.Start())
+	}()
+	defer func() {
+		assert.NoError(t, srv.Stop())
+	}()
+	time.Sleep(5 * time.Second) // waiting for server start
+	testFn(t, client)
 }

@@ -22,7 +22,7 @@ func NewServer(ctx context.Context, app *app.App, port int, host string) (*Serve
 		runtime.WithMarshalerOption("application/json", &runtime.JSONBuiltin{}))
 	err := eventspb.RegisterEventServiceHandlerServer(ctx, mux, app)
 	s := http.Server{
-		Addr:    net.JoinHostPort(host, strconv.Itoa(port)),
+		Addr:    net.JoinHostPort("", strconv.Itoa(port)),
 		Handler: loggingMiddleware(mux),
 		BaseContext: func(net.Listener) context.Context {
 			return ctx

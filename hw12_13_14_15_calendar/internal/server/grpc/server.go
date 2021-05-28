@@ -2,8 +2,8 @@ package internalgrpc
 
 import (
 	"context"
-	"fmt"
 	"net"
+	"strconv"
 
 	grpc_logrus "github.com/grpc-ecosystem/go-grpc-middleware/logging/logrus"
 	"github.com/sirupsen/logrus"
@@ -40,7 +40,7 @@ func NewServer(_ context.Context, app *app.App, port int, host string) (*Server,
 }
 
 func (s *Server) Start() error {
-	lis, err := net.Listen("tcp", fmt.Sprintf("%s:%d", s.host, s.port))
+	lis, err := net.Listen("tcp", net.JoinHostPort("", strconv.Itoa(s.port)))
 	if err != nil {
 		log.Error("failed to listen", log.Fields{
 			"host": s.host,
